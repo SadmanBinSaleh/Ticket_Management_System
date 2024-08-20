@@ -1,0 +1,164 @@
+
+# TICKET MANAGEMENT SYSTEM
+
+
+import requests          
+import logging          
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests.exceptions import HTTPError, Timeout, RequestException
+
+
+# Configure Error Handling & logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+# This class represents a ticket with an ID, description, status, and the amount paid.
+class Ticket:
+    def __init__(self, ticket_id, description, amount_paid=0):
+        self.ticket_id = ticket_id
+        self.description = description
+        self.status = "Open"
+        self.amount_paid = amount_paid  # Amount paid for the ticket
+
+    def resolve(self):
+        self.status = "Resolved"
+
+
+ # This class manages ticket operations, including creating, viewing, and resolving tickets. It supports both simulated and real payment processing.
+
+class TicketSystem:
+    def __init__(self, use_real_payment=True):
+        self.tickets = []
+        self.next_id = 1
+        self.use_real_payment = use_real_payment
+        self.executor = ThreadPoolExecutor(max_workers=10)  # Limit to 10 concurrent tasks
+    
+    def create_ticket(self, description, payment_amount):
+        if self.process_payment(payment_amount):
+            ticket = Ticket(self.next_id, description, payment_amount)
+            self.tickets.append(ticket)
+            self.next_id += 1
+            logging.info(f"Ticket #{ticket.ticket_id} created.")
+        else:
+            logging.warning("Payment failed. Ticket not created.")
+    
+    def view_tickets(self):
+        if not self.tickets:
+            logging.info("No Tickets Found.")
+        else:
+            for ticket in self.tickets:
+                logging.info(f"ID: {ticket.ticket_id}, Description: {ticket.description}, Status: {ticket.status}, Amount Paid: ${ticket.amount_paid}")
+    
+    def resolve_ticket(self, ticket_id):
+        for ticket in self.tickets:
+            if ticket.ticket_id == ticket_id:
+                ticket.resolve()
+                logging.info(f"Ticket #{ticket_id} resolved.")
+                return
+        logging.warning(f"Ticket #{ticket_id} not found.")
+    
+    def process_payment(self, amount):
+        if self.use_real_payment:
+            return self.process_real_payment(amount)
+        else:
+            return self.process_simulated_payment(amount)
+
+
+    # Stimulated Payment Processing
+
+    def process_simulated_payment(self, amount):
+        logging.info(f"Simulating payment processing of ${amount}...")
+        # Simulate a successful payment
+        return True
+
+
+
+    # Real Payment Processing
+
+    def process_real_payment(self, amount):
+        url = "https://api.bkash.com/payment"
+        headers = {
+            "Authorization": "Bearer YOUR_ACCESS_TOKEN",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "amount": amount,
+            "phone_number": "USER_PHONE_NUMBER",
+            "transaction_id": "UNIQUE_TRANSACTION_ID"
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            
+            try:
+                result = response.json()
+            except ValueError:
+                logging.error("Failed to parse JSON response.")
+                return False
+            
+            if result.get("status") == "success":
+                logging.info(f"Payment of ${amount} was successful.")
+                return True
+            else:
+                logging.error(f"Payment failed: {result.get('message')}")
+                return False
+        
+        except HTTPError as http_err:
+            logging.error(f"HTTP error occurred: {http_err}")
+        except Timeout as timeout_err:
+            logging.error(f"Request timed out: {timeout_err}")
+        except RequestException as req_err:
+            logging.error(f"Request error occurred: {req_err}")
+        except Exception as err:
+            logging.error(f"An unexpected error occurred: {err}")
+        
+        return False
+
+
+
+  # Handling Input From User
+
+def handle_user_input(system, choice):
+    if choice == "1":
+        description = input("Enter the ticket description: ")
+        try:
+            payment_amount = float(input("Enter the payment amount: "))
+            system.create_ticket(description, payment_amount)
+        except ValueError:
+            logging.error("Invalid payment amount. Please enter a number.")
+    elif choice == "2":
+        system.view_tickets()
+    elif choice == "3":
+        try:
+            ticket_id = int(input("Enter the ticket ID to resolve: "))
+            system.resolve_ticket(ticket_id)
+        except ValueError:
+            logging.error("Invalid ticket ID. Please enter a number.")
+    elif choice == "4":
+        logging.info("Exiting the ticket management system.")
+        return False
+    else:
+        logging.error("Invalid choice. Please select a valid option.")
+    return True
+
+
+# Main Function
+
+def main():
+    system = TicketSystem(use_real_payment=False)
+    
+    while True:
+        print("\nTicket Management System.")
+        print("1. Create Ticket")
+        print("2. View Tickets")
+        print("3. Resolve Ticket")
+        print("4. Exit")
+
+        choice = input("Enter your choice: ")
+        
+        if not handle_user_input(system, choice):
+            break
+
+if __name__ == "__main__":
+    main()
